@@ -17,7 +17,7 @@ export default function Dashboard() {
   const [pitStops, setPitStops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTheme, setCurrentTheme] = useState('orange');
-  const [isLight, setIsLight] = useState(true);
+  const [isLight, setIsLight] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [limit, setLimit] = useState(10);
