@@ -7,6 +7,15 @@
   --accent-rgb: 249,115,22;
 }
 
+/* Explizites Light Theme */
+[data-theme="light"] {
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --text: #1e293b;
+  --muted: #64748b;
+  --border: rgba(100,116,139,0.2);
+}
+
 [data-theme="dark"] {
   --bg: #0f172a;
   --panel: #1e293b;

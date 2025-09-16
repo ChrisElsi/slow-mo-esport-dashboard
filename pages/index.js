@@ -17,7 +17,7 @@ export default function Dashboard() {
   const [pitStops, setPitStops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTheme, setCurrentTheme] = useState('orange');
-  const [isLight, setIsLight] = useState(false);
+  const [isLight, setIsLight] = useState(true); // Korrigiert: true statt false
   const [showForm, setShowForm] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [limit, setLimit] = useState(10);
@@ -41,6 +41,8 @@ export default function Dashboard() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isLight ? 'light' : 'dark');
     document.documentElement.setAttribute('data-color', currentTheme);
+    // Debug
+    console.log('Theme gesetzt:', isLight ? 'light' : 'dark', 'Color:', currentTheme);
   }, [isLight, currentTheme]);
 
   // Daten laden
@@ -462,6 +464,58 @@ export default function Dashboard() {
           <span className="muted">Status: Online</span>
         </div>
       </div>
+
+      {/* CSS Variablen - Global */}
+      <style jsx global>{`
+        :root {
+          --bg: #f8fafc;
+          --panel: #ffffff;
+          --text: #1e293b;
+          --muted: #64748b;
+          --border: rgba(100,116,139,0.2);
+          --accent-rgb: 249,115,22;
+        }
+
+        [data-theme="light"] {
+          --bg: #f8fafc;
+          --panel: #ffffff;
+          --text: #1e293b;
+          --muted: #64748b;
+          --border: rgba(100,116,139,0.2);
+        }
+
+        [data-theme="dark"] {
+          --bg: #0f172a;
+          --panel: #1e293b;
+          --text: #f1f5f9;
+          --muted: #94a3b8;
+          --border: rgba(148,163,184,0.2);
+        }
+
+        [data-color="orange"] {
+          --brand: #ea580c;
+          --accent: #f97316;
+          --accent-rgb: 249,115,22;
+        }
+
+        [data-color="green"] {
+          --brand: #16a34a;
+          --accent: #22c55e;
+          --accent-rgb: 34,197,94;
+        }
+
+        [data-color="yellow"] {
+          --brand: #ca8a04;
+          --accent: #eab308;
+          --accent-rgb: 234,179,8;
+        }
+
+        [data-color="blue"] {
+          --brand: #2563eb;
+          --accent: #3b82f6;
+          --accent-rgb: 59,130,246;
+        }
+      `}</style>
 
       <style jsx>{`
         .dashboard {
