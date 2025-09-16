@@ -1,379 +1,192 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Trophy, Clock, Fuel, Timer, Users, TrendingUp, RefreshCw } from 'lucide-react';
+import { Trophy, Clock, Users, RefreshCw, AlertTriangle } from 'lucide-react';
 
 // Supabase Configuration
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'YOUR_SUPABASE_URL';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
-
-let supabase;
-try {
-  supabase = createClient(supabaseUrl, supabaseKey);
-} catch (error) {
-  console.error('Supabase initialization error:', error);
-  supabase = null;
-}
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export default function Dashboard() {
-  const [pitStops, setPitStops] = useState([]);
-  const [drivers, setDrivers] = useState([]);
-  const [teams, setTeams] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-  const [error, setError] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState('testing');
+  const [errorDetails, setErrorDetails] = useState('');
+  const [supabaseClient, setSupabaseClient] = useState(null);
 
-  // Daten laden
-  const fetchData = async () => {
-    if (!supabase) {
-      setError('Supabase nicht konfiguriert');
-      setLoading(false);
+  useEffect(() => {
+    testConnection();
+  }, []);
+
+  const testConnection = async () => {
+    console.log('=== DASHBOARD DEBUG INFO ===');
+    console.log('Supabase URL:', supabaseUrl);
+    console.log('Supabase Key (first 20 chars):', supabaseKey ? supabaseKey.substring(0, 20) + '...' : 'MISSING');
+    
+    // Check Environment Variables
+    if (!supabaseUrl || !supabaseKey) {
+      setConnectionStatus('env_error');
+      setErrorDetails(`Fehlende Environment Variables:
+        - SUPABASE_URL: ${supabaseUrl ? '✅' : '❌ FEHLT'}
+        - SUPABASE_KEY: ${supabaseKey ? '✅' : '❌ FEHLT'}`);
       return;
     }
 
     try {
-      setLoading(true);
-      setError(null);
+      // Create Supabase client
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      setSupabaseClient(supabase);
       
-      // Pit Stops laden
-      const { data: pitData, error: pitError } = await supabase
-        .from('pit_stops')
-        .select(`
-          *,
-          drivers(driver_name, team_id),
-          teams(team_name)
-        `)
-        .order('timestamp', { ascending: false })
-        .limit(50);
-
-      // Fahrer laden
-      const { data: driverData, error: driverError } = await supabase
-        .from('drivers')
-        .select('*')
-        .order('driver_name');
-
-      // Teams laden
-      const { data: teamData, error: teamError } = await supabase
+      console.log('Supabase Client erstellt:', supabase);
+      
+      // Test simple query
+      setConnectionStatus('connecting');
+      const { data, error } = await supabase
         .from('teams')
         .select('*')
-        .order('team_name');
-
-      // Fehlerbehandlung
-      if (pitError || driverError || teamError) {
-        console.error('Database errors:', { pitError, driverError, teamError });
-        setError('Fehler beim Laden der Daten');
+        .limit(1);
+      
+      console.log('Teams Query Result:', { data, error });
+      
+      if (error) {
+        setConnectionStatus('query_error');
+        setErrorDetails(`Datenbank-Fehler: ${error.message}
+        
+Mögliche Ursachen:
+- Tabellen existieren nicht
+- Row Level Security ist aktiviert
+- Falsche API Keys`);
         return;
       }
-
-      setPitStops(pitData || []);
-      setDrivers(driverData || []);
-      setTeams(teamData || []);
-      setLastUpdate(new Date());
+      
+      setConnectionStatus('connected');
       
     } catch (error) {
-      console.error('Fehler beim Laden der Daten:', error);
-      setError('Verbindungsfehler zur Datenbank');
-    } finally {
-      setLoading(false);
+      console.error('Connection Error:', error);
+      setConnectionStatus('connection_error');
+      setErrorDetails(`Verbindungsfehler: ${error.message}`);
     }
   };
 
-  // Initial load und Auto-Refresh
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // Alle 30 Sekunden
-    return () => clearInterval(interval);
-  }, []);
-
-  // Statistiken berechnen
-  const stats = {
-    totalPitStops: pitStops.length,
-    avgPitTime: pitStops.length > 0 
-      ? (pitStops.reduce((sum, stop) => sum + (stop.pit_time || 0), 0) / pitStops.length).toFixed(2)
-      : 0,
-    fastestPit: pitStops.length > 0 
-      ? Math.min(...pitStops.map(stop => stop.pit_time || 999)).toFixed(2)
-      : 0,
-    totalDrivers: drivers.length
+  const renderStatus = () => {
+    switch (connectionStatus) {
+      case 'testing':
+        return (
+          <div className="text-center">
+            <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-white mb-2">Dashboard-Verbindung testen...</h2>
+            <p className="text-gray-400">Prüfe Supabase-Konfiguration...</p>
+          </div>
+        );
+        
+      case 'env_error':
+        return (
+          <div className="text-center">
+            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-white mb-4">Environment Variables Fehler</h2>
+            <div className="bg-red-900/20 border border-red-500 rounded-lg p-4 text-left">
+              <pre className="text-red-400 text-sm whitespace-pre-wrap">{errorDetails}</pre>
+            </div>
+            <div className="mt-6 space-y-2">
+              <p className="text-gray-300">Lösung:</p>
+              <p className="text-sm text-gray-400">1. Gehen Sie zu Vercel Settings → Environment Variables</p>
+              <p className="text-sm text-gray-400">2. Fügen Sie die fehlenden Variablen hinzu</p>
+              <p className="text-sm text-gray-400">3. Klicken Sie "Redeploy"</p>
+            </div>
+          </div>
+        );
+        
+      case 'connecting':
+        return (
+          <div className="text-center">
+            <RefreshCw className="w-8 h-8 text-yellow-500 animate-spin mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-white mb-2">Verbinde mit Datenbank...</h2>
+            <p className="text-gray-400">Teste Datenbankzugriff...</p>
+          </div>
+        );
+        
+      case 'query_error':
+        return (
+          <div className="text-center">
+            <AlertTriangle className="w-12 h-12 text-orange-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-white mb-4">Datenbank-Problem</h2>
+            <div className="bg-orange-900/20 border border-orange-500 rounded-lg p-4 text-left">
+              <pre className="text-orange-400 text-sm whitespace-pre-wrap">{errorDetails}</pre>
+            </div>
+            <div className="mt-6 space-y-2">
+              <p className="text-gray-300">Lösungshilfe:</p>
+              <p className="text-sm text-gray-400">1. Gehen Sie zu Supabase SQL Editor</p>
+              <p className="text-sm text-gray-400">2. Führen Sie das Schema-SQL nochmal aus</p>
+              <p className="text-sm text-gray-400">3. Prüfen Sie RLS (Row Level Security)</p>
+            </div>
+          </div>
+        );
+        
+      case 'connection_error':
+        return (
+          <div className="text-center">
+            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-white mb-4">Verbindungsfehler</h2>
+            <div className="bg-red-900/20 border border-red-500 rounded-lg p-4 text-left">
+              <pre className="text-red-400 text-sm whitespace-pre-wrap">{errorDetails}</pre>
+            </div>
+          </div>
+        );
+        
+      case 'connected':
+        return (
+          <div className="text-center">
+            <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              ✓
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">Verbindung erfolgreich! 🎉</h2>
+            <p className="text-gray-400 mb-6">Supabase-Datenbank ist erreichbar</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg text-white transition-colors"
+            >
+              Dashboard neu laden
+            </button>
+          </div>
+        );
+        
+      default:
+        return null;
+    }
   };
-
-  // Chart-Daten für Pit-Time Entwicklung
-  const pitTimeChart = pitStops
-    .slice(0, 20)
-    .reverse()
-    .map((stop, index) => ({
-      stop: index + 1,
-      pitTime: parseFloat(stop.pit_time || 0),
-      driver: stop.drivers?.driver_name || 'Unbekannt',
-      track: stop.track_name || 'Unbekannt'
-    }));
-
-  // Driver Performance Chart
-  const driverStats = drivers.map(driver => {
-    const driverPits = pitStops.filter(stop => stop.driver_id === driver.driver_id);
-    const avgTime = driverPits.length > 0 
-      ? driverPits.reduce((sum, stop) => sum + (stop.pit_time || 0), 0) / driverPits.length
-      : 0;
-    
-    return {
-      name: driver.driver_name || 'Unbekannt',
-      avgPitTime: parseFloat(avgTime.toFixed(2)),
-      totalStops: driverPits.length,
-      fastestPit: driverPits.length > 0 ? Math.min(...driverPits.map(stop => stop.pit_time || 999)) : 0
-    };
-  }).filter(stat => stat.totalStops > 0);
-
-  const formatTime = (seconds) => {
-    if (!seconds || seconds === 0) return '0:00.0';
-    const mins = Math.floor(seconds / 60);
-    const secs = (seconds % 60).toFixed(1);
-    return `${mins}:${secs.padStart(4, '0')}`;
-  };
-
-  // Error State
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h1 className="text-white text-2xl font-bold mb-2">Dashboard Fehler</h1>
-          <p className="text-gray-400 mb-4">{error}</p>
-          <button 
-            onClick={fetchData}
-            className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg text-white transition-colors"
-          >
-            Erneut versuchen
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Loading State
-  if (loading && pitStops.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-4" />
-          <p className="text-white text-lg">Dashboard wird geladen...</p>
-          <p className="text-gray-400 text-sm mt-2">Verbinde mit Supabase...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 p-6">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-blue-400">
-              {process.env.NEXT_PUBLIC_TEAM_NAME || 'Slow Mo eSport'}
-            </h1>
-            <p className="text-gray-400 mt-1">iRacing Pit Stop Analytics</p>
-          </div>
-          <div className="text-right">
-            <button 
-              onClick={fetchData}
-              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-              disabled={loading}
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Aktualisieren
-            </button>
-            <p className="text-sm text-gray-400 mt-1">
-              Letztes Update: {lastUpdate.toLocaleTimeString('de-DE')}
-            </p>
-          </div>
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold text-blue-400">Slow Mo eSport Dashboard</h1>
+          <p className="text-gray-400 mt-1">Diagnose & Fehlerbehebung</p>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto p-6 space-y-8">
-        {/* Statistik Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Gesamt Pit Stops</p>
-                <p className="text-2xl font-bold text-white">{stats.totalPitStops}</p>
-              </div>
-              <Trophy className="w-8 h-8 text-yellow-500" />
-            </div>
-          </div>
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="bg-gray-800 rounded-xl p-8 border border-gray-700">
+          {renderStatus()}
+        </div>
 
-          <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">⌀ Pit Zeit</p>
-                <p className="text-2xl font-bold text-white">{formatTime(stats.avgPitTime)}</p>
-              </div>
-              <Clock className="w-8 h-8 text-blue-500" />
-            </div>
-          </div>
-
-          <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Schnellster Pit</p>
-                <p className="text-2xl font-bold text-green-400">{formatTime(stats.fastestPit)}</p>
-              </div>
-              <Timer className="w-8 h-8 text-green-500" />
-            </div>
-          </div>
-
-          <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Aktive Fahrer</p>
-                <p className="text-2xl font-bold text-white">{stats.totalDrivers}</p>
-              </div>
-              <Users className="w-8 h-8 text-purple-500" />
-            </div>
+        {/* Debug Info */}
+        <div className="mt-8 bg-gray-800 rounded-xl p-6 border border-gray-700">
+          <h3 className="text-lg font-semibold text-white mb-4">Debug Information</h3>
+          <div className="space-y-2 text-sm">
+            <p><span className="text-gray-400">Environment:</span> <span className="text-green-400">Production</span></p>
+            <p><span className="text-gray-400">Supabase URL:</span> <span className="text-blue-400">{supabaseUrl || 'NICHT GESETZT'}</span></p>
+            <p><span className="text-gray-400">Supabase Key:</span> <span className="text-blue-400">{supabaseKey ? 'GESETZT ✓' : 'NICHT GESETZT ❌'}</span></p>
+            <p><span className="text-gray-400">Status:</span> <span className="text-yellow-400">{connectionStatus}</span></p>
           </div>
         </div>
 
-        {/* Charts */}
-        {pitTimeChart.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Pit Time Trend */}
-            <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-              <h3 className="text-xl font-semibold mb-4 text-white flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-blue-500" />
-                Pit Time Entwicklung
-              </h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={pitTimeChart}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="stop" stroke="#9CA3AF" />
-                  <YAxis stroke="#9CA3AF" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1F2937', 
-                      border: '1px solid #374151',
-                      borderRadius: '8px'
-                    }}
-                    formatter={(value) => [formatTime(value), 'Pit Zeit']}
-                    labelFormatter={(label) => `Stop #${label}`}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="pitTime" 
-                    stroke="#3B82F6" 
-                    strokeWidth={2}
-                    dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Driver Performance */}
-            {driverStats.length > 0 && (
-              <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-                <h3 className="text-xl font-semibold mb-4 text-white flex items-center gap-2">
-                  <Users className="w-5 h-5 text-purple-500" />
-                  Fahrer Performance
-                </h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={driverStats}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="name" stroke="#9CA3AF" angle={-45} textAnchor="end" height={80} />
-                    <YAxis stroke="#9CA3AF" />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#1F2937', 
-                        border: '1px solid #374151',
-                        borderRadius: '8px'
-                      }}
-                      formatter={(value, name) => {
-                        if (name === 'avgPitTime') return [formatTime(value), '⌀ Pit Zeit'];
-                        if (name === 'totalStops') return [value, 'Anzahl Stops'];
-                        return [value, name];
-                      }}
-                    />
-                    <Bar dataKey="avgPitTime" fill="#8B5CF6" name="avgPitTime" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Recent Pit Stops Table */}
-        {pitStops.length > 0 ? (
-          <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-            <div className="p-6 border-b border-gray-700">
-              <h3 className="text-xl font-semibold text-white flex items-center gap-2">
-                <Clock className="w-5 h-5 text-blue-500" />
-                Letzte Pit Stops
-              </h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-700">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Zeit</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Fahrer</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Strecke</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Pit Zeit</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Sprit</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Reifen</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700">
-                  {pitStops.slice(0, 10).map((stop) => (
-                    <tr key={stop.pit_stop_id} className="hover:bg-gray-700 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {new Date(stop.timestamp).toLocaleString('de-DE')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                        {stop.drivers?.driver_name || 'Unbekannt'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {stop.track_name || 'Unbekannt'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`font-semibold ${
-                          (stop.pit_time || 0) < 30 ? 'text-green-400' :
-                          (stop.pit_time || 0) < 45 ? 'text-yellow-400' : 'text-red-400'
-                        }`}>
-                          {formatTime(stop.pit_time)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        <div className="flex items-center gap-1">
-                          <Fuel className="w-4 h-4 text-orange-500" />
-                          {(stop.fuel_added || 0).toFixed(1)} L
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          stop.tire_change ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-300'
-                        }`}>
-                          {stop.tire_change ? 'Gewechselt' : 'Nicht gewechselt'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-gray-800 rounded-xl p-12 text-center border border-gray-700">
-            <div className="text-6xl mb-4">🏁</div>
-            <h3 className="text-xl font-semibold text-white mb-2">Noch keine Pit Stop Daten</h3>
-            <p className="text-gray-400 mb-6">
-              Starten Sie iRacing und der Python Logger wird automatisch Daten erfassen.
-            </p>
-            <button 
-              onClick={fetchData}
-              className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg text-white transition-colors"
-            >
-              Erneut prüfen
-            </button>
-          </div>
-        )}
+        {/* Action Buttons */}
+        <div className="mt-6 flex gap-4 justify-center">
+          <button 
+            onClick={testConnection}
+            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Erneut testen
+          </button>
+        </div>
       </div>
     </div>
   );
