@@ -17,17 +17,17 @@ export default function Dashboard() {
   const [pitStops, setPitStops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTheme, setCurrentTheme] = useState('orange');
-  const [isLight, setIsLight] = useState(true); // Korrigiert: true statt false
+  const [isLight, setIsLight] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [limit, setLimit] = useState(10);
   
   // Form State
   const [formData, setFormData] = useState({
-    driver_name: 'Web Driver',
-    track_name: 'Spa-Francorchamps',
+    driver_name: 'Christian Eisinger',
+    track_name: 'Autodromo Nazionale Monza',
     track_version: '2022',
-    car_name: 'GT3',
+    car_name: 'BMW M4 GT3',
     car_class: 'GT3 Class',
     pit_time: '85.1',
     fuel_added: '30.0',
@@ -41,7 +41,6 @@ export default function Dashboard() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isLight ? 'light' : 'dark');
     document.documentElement.setAttribute('data-color', currentTheme);
-    // Debug
     console.log('Theme gesetzt:', isLight ? 'light' : 'dark', 'Color:', currentTheme);
   }, [isLight, currentTheme]);
 
@@ -78,7 +77,6 @@ export default function Dashboard() {
     if (!supabase) return;
 
     try {
-      // Fahrer finden oder erstellen
       let { data: driver } = await supabase
         .from('drivers')
         .select('driver_id')
@@ -137,9 +135,22 @@ export default function Dashboard() {
     }
   };
 
-  const formatTime = (seconds) => {
-    if (!seconds) return '0.0';
-    return seconds.toFixed(1);
+  // Neue Formatierung für Rundenzeiten (MM:SS.mmm)
+  const formatLapTime = (seconds) => {
+    if (!seconds) return '00:00.000';
+    
+    const totalMs = Math.round(seconds * 1000);
+    const minutes = Math.floor(totalMs / 60000);
+    const secs = Math.floor((totalMs % 60000) / 1000);
+    const ms = totalMs % 1000;
+    
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+  };
+
+  // Formatierung für Kraftstoff mit Liter-Angabe
+  const formatFuel = (liters) => {
+    if (!liters) return '0.0 L';
+    return `${liters.toFixed(1)} L`;
   };
 
   const formatDate = (dateString) => {
@@ -255,6 +266,7 @@ export default function Dashboard() {
                         type="text" 
                         value={formData.car_name}
                         onChange={(e) => setFormData({...formData, car_name: e.target.value})}
+                        placeholder="z.B. BMW M4 GT3, McLaren 720S GT3, etc."
                       />
                     </div>
                     <div className="field">
@@ -285,15 +297,16 @@ export default function Dashboard() {
                       />
                     </div>
                     <div className="field">
-                      <label>InLap (s)</label>
+                      <label>InLap Zeit</label>
                       <input 
                         type="text" 
                         value={formData.pit_time}
                         onChange={(e) => setFormData({...formData, pit_time: e.target.value})}
+                        placeholder="z.B. 85.1 (Sekunden)"
                       />
                     </div>
                     <div className="field">
-                      <label>OutLap (s)</label>
+                      <label>OutLap Zeit</label>
                       <input 
                         type="text" 
                         value="92.7" 
@@ -320,7 +333,7 @@ export default function Dashboard() {
                       />
                     </div>
                     <div className="field">
-                      <label>Tires changed</label>
+                      <label>Reifenwechsel</label>
                       <select 
                         value={formData.tire_change ? 'true' : 'false'}
                         onChange={(e) => setFormData({...formData, tire_change: e.target.value === 'true'})}
@@ -394,12 +407,12 @@ export default function Dashboard() {
                     <th>Fahrzeug</th>
                     <th>Track</th>
                     <th>Runde</th>
-                    <th>InLap (s)</th>
-                    <th>OutLap (s)</th>
-                    <th>Dauer (s)</th>
+                    <th>InLap</th>
+                    <th>OutLap</th>
+                    <th>Dauer</th>
                     <th>Fuel vor</th>
                     <th>Fuel nach</th>
-                    <th>getankt</th>
+                    <th>Getankt</th>
                     <th>Reifen</th>
                     <th>Note</th>
                     <th>Aktion</th>
@@ -416,25 +429,25 @@ export default function Dashboard() {
                     pitStops.map((stop, index) => (
                       <tr key={stop.pit_stop_id}>
                         <td className="muted">{index + 1}</td>
-                        <td>{formatDate(stop.timestamp)}</td>
-                        <td>{new Date(stop.timestamp).toLocaleTimeString('de-DE')}</td>
+                        <td>{formatDate(stop.timestamp).split(',')[0]}</td>
+                        <td>{formatDate(stop.timestamp).split(',')[1]}</td>
                         <td>{stop.drivers?.driver_name || formData.driver_name}</td>
                         <td className="muted">4711</td>
                         <td>{formData.car_name}</td>
                         <td>{stop.track_name}</td>
                         <td>{stop.in_lap}</td>
-                        <td>{formatTime(stop.pit_time)}</td>
-                        <td>{formatTime(stop.pit_time + 7.6)}</td>
-                        <td className="muted">{formatTime(stop.pit_time)}</td>
-                        <td>{formatTime(stop.fuel_before || 0)}</td>
-                        <td>{formatTime(stop.fuel_after || 0)}</td>
+                        <td>{formatLapTime(stop.pit_time)}</td>
+                        <td>{formatLapTime(stop.pit_time + 7.6)}</td>
+                        <td className="muted">{formatLapTime(stop.pit_time)}</td>
+                        <td>{formatFuel(stop.fuel_before || 0)}</td>
+                        <td>{formatFuel(stop.fuel_after || 0)}</td>
+                        <td>{formatFuel(stop.fuel_added)}</td>
                         <td>
                           {stop.tire_change ? 
                             <span className="pill green">Ja</span> : 
                             <span className="pill gray">Nein</span>
                           }
                         </td>
-                        <td>{formatTime(stop.fuel_added)}</td>
                         <td className="muted">{stop.notes || formData.notes || '-'}</td>
                         <td>
                           <button 
